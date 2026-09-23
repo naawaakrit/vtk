@@ -21,13 +21,14 @@ import (
 )
 
 type appState struct {
-	lib          *Library
-	win          fyne.Window
-	tabs         map[string]*tabState // 1 แท็บ ต่อ 1 โฟลเดอร์แม่ที่เคยสแกน (key = root path)
-	tabsWidget   *container.AppTabs
-	selectedIdx  int
-	markedSeries map[*Series]bool
-	rootPath     string
+	lib            *Library
+	win            fyne.Window
+	tabs           map[string]*tabState // 1 แท็บ ต่อ 1 โฟลเดอร์แม่ที่เคยสแกน (key = root path)
+	tabsWidget     *container.AppTabs
+	selectedIdx    int
+	markedSeries   map[*Series]bool
+	markedEpisodes map[*Episode]bool
+	rootPath       string
 }
 
 // โหลด icon
@@ -85,12 +86,13 @@ func main() {
 	sortSeriesForDisplay(lib.SeriesList)
 
 	state := &appState{
-		lib:          lib,
-		win:          w,
-		tabs:         map[string]*tabState{},
-		tabsWidget:   container.NewAppTabs(),
-		selectedIdx:  -1,
-		markedSeries: map[*Series]bool{},
+		lib:            lib,
+		win:            w,
+		tabs:           map[string]*tabState{},
+		tabsWidget:     container.NewAppTabs(),
+		selectedIdx:    -1,
+		markedSeries:   map[*Series]bool{},
+		markedEpisodes: map[*Episode]bool{},
 	}
 
 	scanBtn := widget.NewButtonWithIcon("สแกนโฟลเดอร์", theme.FolderOpenIcon(), func() {
@@ -110,6 +112,10 @@ func main() {
 		state.confirmDeleteMarkedSeries()
 	})
 	deleteMarkedBtn.Importance = widget.DangerImportance
+	deleteMarkedEpisodesBtn := widget.NewButtonWithIcon("ลบตอนที่เลือก", theme.DeleteIcon(), func() {
+		state.confirmDeleteMarkedEpisodes()
+	})
+	deleteMarkedEpisodesBtn.Importance = widget.DangerImportance
 	playSeriesBtn := widget.NewButtonWithIcon("เล่นซีรีส์นี้", theme.MediaPlayIcon(), func() {
 		state.playSelectedSeries()
 	})
@@ -122,7 +128,7 @@ func main() {
 	continueBtn := widget.NewButtonWithIcon("ดูต่อ", theme.HistoryIcon(), func() {
 		state.showContinueWatching()
 	})
-	toolbar := container.NewHBox(scanBtn, refreshAllBtn, organizeBtn, playSeriesBtn, renameSeriesBtn, deleteSeriesBtn, deleteMarkedBtn, statsBtn, continueBtn)
+	toolbar := container.NewHBox(scanBtn, refreshAllBtn, organizeBtn, playSeriesBtn, renameSeriesBtn, deleteSeriesBtn, deleteMarkedBtn, deleteMarkedEpisodesBtn, statsBtn, continueBtn)
 
 	// สร้างแท็บให้ครบทุกโฟลเดอร์แม่ที่เคยสแกนไว้จากเซสชันก่อนหน้า (ถ้ามี) เรียงตามชื่อให้ลำดับคงที่ทุกครั้งที่เปิดแอป
 	rootSet := map[string]bool{}
@@ -615,6 +621,7 @@ func (s *appState) confirmDeleteEpisode(series *Series, ep *Episode) {
 // removeEpisodeFromLibrary เอา episode ออกจาก library เท่านั้น (ไม่แตะไฟล์บนดิสก์)
 // ถ้าเป็นตอนสุดท้ายของซีรีส์ จะเอาซีรีส์นั้นออกจากลิสต์ไปด้วย (ไม่เหลือตอนให้แสดง)
 func (s *appState) removeEpisodeFromLibrary(series *Series, ep *Episode) {
+	delete(s.markedEpisodes, ep)
 	var remaining []*Episode
 	for _, e := range series.Episodes {
 		if e != ep {
@@ -628,6 +635,85 @@ func (s *appState) removeEpisodeFromLibrary(series *Series, ep *Episode) {
 		for _, sr := range s.lib.SeriesList {
 			if sr != series {
 				newList = append(newList, sr)
+			}
+		}
+		s.lib.SeriesList = newList
+		s.selectedIdx = -1
+	}
+
+	if err := SaveLibrary(s.lib); err != nil {
+		dialog.ShowError(err, s.win)
+	}
+	sortSeriesForDisplay(s.lib.SeriesList)
+	s.refreshSeriesRows()
+	s.refreshEpisodeRows()
+}
+
+func (s *appState) confirmDeleteMarkedEpisodes() {
+	if s.selectedIdx < 0 || s.selectedIdx >= len(s.lib.SeriesList) {
+		dialog.ShowInformation("ลบตอนที่เลือก", "กรุณาเลือกซีรีส์ก่อน", s.win)
+		return
+	}
+	series := s.lib.SeriesList[s.selectedIdx]
+	var selected []*Episode
+	for _, ep := range series.Episodes {
+		if s.markedEpisodes[ep] {
+			selected = append(selected, ep)
+		}
+	}
+	if len(selected) == 0 {
+		dialog.ShowInformation("ลบตอนที่เลือก", "กรุณาติ๊กเลือกตอนอย่างน้อย 1 รายการก่อน", s.win)
+		return
+	}
+
+	var names strings.Builder
+	for _, ep := range selected {
+		fmt.Fprintf(&names, "• %s\n", ep.FileName)
+	}
+	msg := fmt.Sprintf(
+		"เลือกไว้ %d ตอน:\n\n%s\n• ย้ายไปถังขยะ = ย้ายไฟล์ที่เลือกไปถังขยะของระบบ\n"+
+			"• ลบแค่ลิสต์ = เอาออกจากรายการติดตาม ไฟล์บนดิสก์ยังอยู่เหมือนเดิม",
+		len(selected), names.String(),
+	)
+	showDeleteChoiceDialog(s.win, "ลบตอนที่เลือก", msg,
+		func() {
+			for _, ep := range selected {
+				if !ep.Exists {
+					continue
+				}
+				if err := moveToTrash(ep.FilePath); err != nil {
+					dialog.ShowError(err, s.win)
+					return
+				}
+			}
+			s.removeMarkedEpisodesFromLibrary(series, selected)
+		},
+		func() {
+			s.removeMarkedEpisodesFromLibrary(series, selected)
+		},
+	)
+}
+
+func (s *appState) removeMarkedEpisodesFromLibrary(series *Series, selected []*Episode) {
+	selectedSet := map[*Episode]bool{}
+	for _, ep := range selected {
+		selectedSet[ep] = true
+		delete(s.markedEpisodes, ep)
+	}
+
+	var remaining []*Episode
+	for _, ep := range series.Episodes {
+		if !selectedSet[ep] {
+			remaining = append(remaining, ep)
+		}
+	}
+	series.Episodes = remaining
+
+	if len(series.Episodes) == 0 {
+		var newList []*Series
+		for _, current := range s.lib.SeriesList {
+			if current != series {
+				newList = append(newList, current)
 			}
 		}
 		s.lib.SeriesList = newList
@@ -997,7 +1083,15 @@ func (s *appState) refreshEpisodeRows() {
 		for i, ep := range series.Episodes {
 			ep := ep // capture ไว้ในลูป ป้องกันปัญหาตัวแปรซ้ำใน closure
 
-			check := widget.NewCheck("", nil)
+			watchedCheck := widget.NewCheck("", nil)
+			deleteCheck := widget.NewCheck("", func(marked bool) {
+				if marked {
+					s.markedEpisodes[ep] = true
+				} else {
+					delete(s.markedEpisodes, ep)
+				}
+			})
+			deleteCheck.SetChecked(s.markedEpisodes[ep])
 			resumeNote := ""
 			if ep.ResumeSeconds > 1 {
 				resumeNote = fmt.Sprintf(" (ค้างไว้ที่ %s)", formatDuration(ep.ResumeSeconds))
@@ -1008,8 +1102,8 @@ func (s *appState) refreshEpisodeRows() {
 			renameBtn := widget.NewButtonWithIcon("", theme.DocumentCreateIcon(), nil)
 			delBtn := widget.NewButtonWithIcon("", theme.DeleteIcon(), nil)
 
-			check.SetChecked(ep.Watched)
-			check.OnChanged = func(v bool) {
+			watchedCheck.SetChecked(ep.Watched)
+			watchedCheck.OnChanged = func(v bool) {
 				ep.Watched = v
 				s.refreshSeriesRows()
 				_ = SaveLibrary(s.lib)
@@ -1034,7 +1128,7 @@ func (s *appState) refreshEpisodeRows() {
 				renameBtn.Disable()
 			}
 
-			row := container.NewHBox(check, label, status, playBtn, renameBtn, delBtn)
+			row := container.NewHBox(deleteCheck, watchedCheck, label, status, playBtn, renameBtn, delBtn)
 			wrappedRow := newDoubleTapWrapper(row, func() {
 				s.playEpisode(ep)
 			})
