@@ -15,12 +15,14 @@ import (
 type seriesRow struct {
 	widget.BaseWidget
 	content           *fyne.Container
+	selectCheck       *widget.Check
 	label             *widget.Label
 	starBtn           *widget.Button
 	onTapped          func()
 	onDoubleTapped    func()
 	onSecondaryTapped func(*fyne.PointEvent)
 	isSelected        bool
+	isMarked          bool
 	libIndex          int // ตำแหน่งจริงใน lib.SeriesList (ไม่ใช่ตำแหน่งในลิสต์ที่กรองแล้ว ใช้เทียบ selectedIdx ให้ถูกต้อง)
 }
 
@@ -30,24 +32,32 @@ type seriesRow struct {
 //   - onTapped: กดที่แถว 1 ครั้ง (เลือกดูซีรีส์นี้)
 //   - onDoubleTapped: ดับเบิลคลิกที่แถว (เล่นซีรีส์นี้ทั้งหมดทันที)
 //   - onStarTapped: กดปุ่มดาว (สลับสถานะติดดาว) แยกจาก onTapped ไม่ทำให้แถวถูกเลือกไปด้วย
-func newSeriesRow(text string, showStar bool, starred bool, onTapped func(), onDoubleTapped func(), onStarTapped func()) *seriesRow {
+func newSeriesRow(text string, showStar bool, starred bool, marked bool, onTapped func(), onDoubleTapped func(), onStarTapped func(), onMarkedChanged func(bool)) *seriesRow {
 	r := &seriesRow{
+		selectCheck:    widget.NewCheck("", onMarkedChanged),
 		label:          widget.NewLabel(text),
 		onTapped:       onTapped,
 		onDoubleTapped: onDoubleTapped,
+		isMarked:       marked,
 	}
+	r.selectCheck.SetChecked(marked)
 	r.label.Wrapping = fyne.TextWrapWord
 
 	if showStar {
 		r.starBtn = widget.NewButton(starGlyph(starred), onStarTapped)
 		r.starBtn.Importance = widget.LowImportance
-		r.content = container.NewBorder(nil, nil, nil, r.starBtn, r.label)
+		r.content = container.NewBorder(nil, nil, r.selectCheck, r.starBtn, r.label)
 	} else {
-		r.content = container.NewBorder(nil, nil, nil, nil, r.label)
+		r.content = container.NewBorder(nil, nil, r.selectCheck, nil, r.label)
 	}
 
 	r.ExtendBaseWidget(r)
 	return r
+}
+
+func (r *seriesRow) SetMarked(marked bool) {
+	r.isMarked = marked
+	r.selectCheck.SetChecked(marked)
 }
 
 func starGlyph(starred bool) string {

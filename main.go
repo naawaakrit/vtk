@@ -21,12 +21,13 @@ import (
 )
 
 type appState struct {
-	lib         *Library
-	win         fyne.Window
-	tabs        map[string]*tabState // 1 แท็บ ต่อ 1 โฟลเดอร์แม่ที่เคยสแกน (key = root path)
-	tabsWidget  *container.AppTabs
-	selectedIdx int
-	rootPath    string
+	lib          *Library
+	win          fyne.Window
+	tabs         map[string]*tabState // 1 แท็บ ต่อ 1 โฟลเดอร์แม่ที่เคยสแกน (key = root path)
+	tabsWidget   *container.AppTabs
+	selectedIdx  int
+	markedSeries map[*Series]bool
+	rootPath     string
 }
 
 // โหลด icon
@@ -84,11 +85,12 @@ func main() {
 	sortSeriesForDisplay(lib.SeriesList)
 
 	state := &appState{
-		lib:         lib,
-		win:         w,
-		tabs:        map[string]*tabState{},
-		tabsWidget:  container.NewAppTabs(),
-		selectedIdx: -1,
+		lib:          lib,
+		win:          w,
+		tabs:         map[string]*tabState{},
+		tabsWidget:   container.NewAppTabs(),
+		selectedIdx:  -1,
+		markedSeries: map[*Series]bool{},
 	}
 
 	scanBtn := widget.NewButtonWithIcon("สแกนโฟลเดอร์", theme.FolderOpenIcon(), func() {
@@ -104,6 +106,10 @@ func main() {
 		state.confirmDeleteSeries()
 	})
 	deleteSeriesBtn.Importance = widget.DangerImportance
+	deleteMarkedBtn := widget.NewButtonWithIcon("ลบที่เลือก", theme.DeleteIcon(), func() {
+		state.confirmDeleteMarkedSeries()
+	})
+	deleteMarkedBtn.Importance = widget.DangerImportance
 	playSeriesBtn := widget.NewButtonWithIcon("เล่นซีรีส์นี้", theme.MediaPlayIcon(), func() {
 		state.playSelectedSeries()
 	})
@@ -116,7 +122,7 @@ func main() {
 	continueBtn := widget.NewButtonWithIcon("ดูต่อ", theme.HistoryIcon(), func() {
 		state.showContinueWatching()
 	})
-	toolbar := container.NewHBox(scanBtn, refreshAllBtn, organizeBtn, playSeriesBtn, renameSeriesBtn, deleteSeriesBtn, statsBtn, continueBtn)
+	toolbar := container.NewHBox(scanBtn, refreshAllBtn, organizeBtn, playSeriesBtn, renameSeriesBtn, deleteSeriesBtn, deleteMarkedBtn, statsBtn, continueBtn)
 
 	// สร้างแท็บให้ครบทุกโฟลเดอร์แม่ที่เคยสแกนไว้จากเซสชันก่อนหน้า (ถ้ามี) เรียงตามชื่อให้ลำดับคงที่ทุกครั้งที่เปิดแอป
 	rootSet := map[string]bool{}
@@ -636,6 +642,96 @@ func (s *appState) removeEpisodeFromLibrary(series *Series, ep *Episode) {
 	s.refreshEpisodeRows()
 }
 
+func (s *appState) confirmDeleteMarkedSeries() {
+	var selected []*Series
+	for _, series := range s.lib.SeriesList {
+		if s.markedSeries[series] {
+			selected = append(selected, series)
+		}
+	}
+	if len(selected) == 0 {
+		dialog.ShowInformation("ลบซีรีส์ที่เลือก", "กรุณาติ๊กเลือกซีรีส์อย่างน้อย 1 รายการก่อน", s.win)
+		return
+	}
+
+	var names strings.Builder
+	for _, series := range selected {
+		fmt.Fprintf(&names, "• %s\n", series.Name)
+	}
+	msg := fmt.Sprintf(
+		"เลือกไว้ %d ซีรีส์:\n\n%s\n• ย้ายไปถังขยะ = ย้ายไฟล์/โฟลเดอร์ที่เกี่ยวข้องไปถังขยะของระบบ\n"+
+			"• ลบแค่ลิสต์ = เอาออกจากรายการติดตาม ไฟล์บนดิสก์ยังอยู่เหมือนเดิม",
+		len(selected), names.String(),
+	)
+	showDeleteChoiceDialog(s.win, "ลบซีรีส์ที่เลือก", msg,
+		func() {
+			for _, series := range selected {
+				if series.IsRoot {
+					for _, ep := range series.Episodes {
+						if !ep.Exists {
+							continue
+						}
+						if err := moveToTrash(ep.FilePath); err != nil {
+							dialog.ShowError(err, s.win)
+							return
+						}
+					}
+					continue
+				}
+				if err := moveToTrash(series.RootPath); err != nil {
+					dialog.ShowError(err, s.win)
+					return
+				}
+			}
+			s.removeMarkedSeriesFromLibrary(selected)
+		},
+		func() {
+			s.removeMarkedSeriesFromLibrary(selected)
+		},
+	)
+}
+
+func (s *appState) removeMarkedSeriesFromLibrary(selected []*Series) {
+	selectedRoots := map[string]bool{}
+	for _, series := range selected {
+		if series.IsRoot {
+			selectedRoots[series.RootPath] = true
+		}
+	}
+
+	var newList []*Series
+	for _, series := range s.lib.SeriesList {
+		remove := false
+		for _, selectedSeries := range selected {
+			if series == selectedSeries {
+				remove = true
+				break
+			}
+		}
+		if !remove {
+			for root := range selectedRoots {
+				if isUnderRoot(series.RootPath, root) {
+					remove = true
+					break
+				}
+			}
+		}
+		if remove {
+			delete(s.markedSeries, series)
+			continue
+		}
+		newList = append(newList, series)
+	}
+	s.lib.SeriesList = newList
+	s.selectedIdx = -1
+
+	if err := SaveLibrary(s.lib); err != nil {
+		dialog.ShowError(err, s.win)
+	}
+	s.refreshSeriesRows()
+	s.refreshEpisodeRows()
+}
+
 // confirmDeleteSeries ถามว่าจะลบซีรีส์ที่เลือกอยู่แบบไหน: ลบจริงในดิสก์ (ไฟล์/ทั้งโฟลเดอร์) หรือเอาออกจากลิสต์อย่างเดียว
 // ใช้ได้กับทั้งโฟลเดอร์ย่อยทั่วไปและโฟลเดอร์แม่
 func (s *appState) confirmDeleteSeries() {
@@ -820,7 +916,7 @@ func (s *appState) refreshSeriesRows() {
 			text := fmt.Sprintf("%s\nดูล่าสุด: ตอน %d  (ดูแล้ว %d/%d ตอน)",
 				nameLine, series.LastWatchedEpisode(), series.WatchedCount(), series.TotalCount())
 
-			row := newSeriesRow(text, !series.IsRoot, series.Starred, func() {
+			row := newSeriesRow(text, !series.IsRoot, series.Starred, s.markedSeries[series], func() {
 				s.selectedIdx = idx
 				s.updateSeriesSelectionHighlight()
 				s.refreshEpisodeRows()
@@ -840,6 +936,12 @@ func (s *appState) refreshSeriesRows() {
 				sortSeriesForDisplay(s.lib.SeriesList)
 				_ = SaveLibrary(s.lib)
 				s.refreshSeriesRows()
+			}, func(marked bool) {
+				if marked {
+					s.markedSeries[sr] = true
+				} else {
+					delete(s.markedSeries, sr)
+				}
 			})
 			row.SetSelected(idx == s.selectedIdx)
 			row.libIndex = idx
