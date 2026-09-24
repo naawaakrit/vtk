@@ -102,10 +102,6 @@ func main() {
 	organizeBtn := widget.NewButton("จัดกลุ่มไฟล์ชื่อคล้ายกัน", func() {
 		state.organizeSimilar()
 	})
-	deleteMarkedEpisodesBtn := widget.NewButtonWithIcon("ลบตอนที่เลือก", theme.DeleteIcon(), func() {
-		state.confirmDeleteMarkedEpisodes()
-	})
-	deleteMarkedEpisodesBtn.Importance = widget.DangerImportance
 	playSeriesBtn := widget.NewButtonWithIcon("เล่นซีรีส์นี้", theme.MediaPlayIcon(), func() {
 		state.playSelectedSeries()
 	})
@@ -118,7 +114,7 @@ func main() {
 	continueBtn := widget.NewButtonWithIcon("ดูต่อ", theme.HistoryIcon(), func() {
 		state.showContinueWatching()
 	})
-	toolbar := container.NewHBox(scanBtn, refreshAllBtn, organizeBtn, playSeriesBtn, renameSeriesBtn, deleteMarkedEpisodesBtn, statsBtn, continueBtn)
+	toolbar := container.NewHBox(scanBtn, refreshAllBtn, organizeBtn, playSeriesBtn, renameSeriesBtn, statsBtn, continueBtn)
 
 	// สร้างแท็บให้ครบทุกโฟลเดอร์แม่ที่เคยสแกนไว้จากเซสชันก่อนหน้า (ถ้ามี) เรียงตามชื่อให้ลำดับคงที่ทุกครั้งที่เปิดแอป
 	rootSet := map[string]bool{}
@@ -406,8 +402,12 @@ func (s *appState) showEpisodeContextMenu(series *Series, ep *Episode, ev *fyne.
 		s.confirmDeleteEpisode(series, ep)
 	})
 	deleteItem.Icon = theme.DeleteIcon()
+	deleteMarkedItem := fyne.NewMenuItem("ลบตอนที่เลือก", func() {
+		s.confirmDeleteMarkedEpisodes()
+	})
+	deleteMarkedItem.Icon = theme.DeleteIcon()
 
-	menu := fyne.NewMenu("", playItem, renameItem, deleteItem)
+	menu := fyne.NewMenu("", playItem, renameItem, deleteItem, deleteMarkedItem)
 	widget.ShowPopUpMenuAtPosition(menu, s.win.Canvas(), ev.AbsolutePosition)
 }
 
