@@ -363,15 +363,15 @@ func (s *appState) showSeriesContextMenu(idx int, ev *fyne.PointEvent) {
 		}
 	}
 
-	playItem := fyne.NewMenuItem("▶ เล่น", func() {
+	playItem := fyne.NewMenuItem("▶ เล่น ซีรีส์นี้", func() {
 		selectThis()
 		s.playSelectedSeries()
 	})
-	renameItem := fyne.NewMenuItem("แก้ชื่อ", func() {
+	renameItem := fyne.NewMenuItem("แก้ไขชื่อ ซีรีส์นี้", func() {
 		selectThis()
 		s.renameSelectedSeries()
 	})
-	deleteItem := fyne.NewMenuItem("ลบซีรีส์นี้", func() {
+	deleteItem := fyne.NewMenuItem("ลบ ซีรีส์นี้", func() {
 		selectThis()
 		s.confirmDeleteSeries()
 	})
@@ -388,21 +388,21 @@ func (s *appState) showSeriesContextMenu(idx int, ev *fyne.PointEvent) {
 // showEpisodeContextMenu แสดงเมนูคลิกขวา (เล่น / แก้ชื่อ / ลบ) สำหรับไฟล์ตอนนี้
 // ทำงานเดียวกันกับปุ่มต่อแถวในหน้าตอนทุกประการ แค่เข้าถึงผ่านคลิกขวาแทน
 func (s *appState) showEpisodeContextMenu(series *Series, ep *Episode, ev *fyne.PointEvent) {
-	playItem := fyne.NewMenuItem("▶ เล่น", func() {
+	playItem := fyne.NewMenuItem("▶ เล่น ไฟล์นี้", func() {
 		s.playEpisode(ep)
 	})
 	playItem.Disabled = !ep.Exists
 
-	renameItem := fyne.NewMenuItem("แก้ชื่อ", func() {
+	renameItem := fyne.NewMenuItem("แก้ไขชื่อ ไฟล์นี้", func() {
 		s.renameEpisode(ep)
 	})
 	renameItem.Disabled = !ep.Exists
 
-	deleteItem := fyne.NewMenuItem("ลบ", func() {
+	deleteItem := fyne.NewMenuItem("ลบ ไฟล์นี้", func() {
 		s.confirmDeleteEpisode(series, ep)
 	})
 	deleteItem.Icon = theme.DeleteIcon()
-	deleteMarkedItem := fyne.NewMenuItem("ลบตอนที่เลือก", func() {
+	deleteMarkedItem := fyne.NewMenuItem("ลบ ไฟล์ที่เลือก", func() {
 		s.confirmDeleteMarkedEpisodes()
 	})
 	deleteMarkedItem.Icon = theme.DeleteIcon()
