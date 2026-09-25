@@ -69,7 +69,7 @@ var myFont = fyne.NewStaticResource("Itim-Regular.ttf", fontItim)
 // = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
 func main() {
-	a := app.NewWithID("com.nawakarit.vtk")
+	a := app.NewWithID("com.naawaakrit.vtk")
 	a.Settings().SetTheme(&MyTheme{})
 	icon := loadIcon(64)
 	a.SetIcon(icon)
@@ -105,7 +105,7 @@ func main() {
 	playSeriesBtn := widget.NewButtonWithIcon("เล่นซีรีส์นี้", theme.MediaPlayIcon(), func() {
 		state.playSelectedSeries()
 	})
-	renameSeriesBtn := widget.NewButtonWithIcon("แก้ชื่อ", theme.DocumentCreateIcon(), func() {
+	renameSeriesBtn := widget.NewButtonWithIcon("แก้ชื่อซีรีส์นี้", theme.DocumentCreateIcon(), func() {
 		state.renameSelectedSeries()
 	})
 	statsBtn := widget.NewButtonWithIcon("สถิติ", theme.InfoIcon(), func() {
@@ -367,7 +367,7 @@ func (s *appState) showSeriesContextMenu(idx int, ev *fyne.PointEvent) {
 		selectThis()
 		s.playSelectedSeries()
 	})
-	renameItem := fyne.NewMenuItem("แก้ไขชื่อ ซีรีส์นี้", func() {
+	renameItem := fyne.NewMenuItem("⚙︎ แก้ไขชื่อ ซีรีส์นี้", func() {
 		selectThis()
 		s.renameSelectedSeries()
 	})
@@ -376,7 +376,7 @@ func (s *appState) showSeriesContextMenu(idx int, ev *fyne.PointEvent) {
 		s.confirmDeleteSeries()
 	})
 	deleteItem.Icon = theme.DeleteIcon()
-	deleteMarkedItem := fyne.NewMenuItem("ลบซีรีส์ที่เลือก", func() {
+	deleteMarkedItem := fyne.NewMenuItem("ลบ ซีรีส์ที่เลือก", func() {
 		s.confirmDeleteMarkedSeries()
 	})
 	deleteMarkedItem.Icon = theme.DeleteIcon()
@@ -393,7 +393,7 @@ func (s *appState) showEpisodeContextMenu(series *Series, ep *Episode, ev *fyne.
 	})
 	playItem.Disabled = !ep.Exists
 
-	renameItem := fyne.NewMenuItem("แก้ไขชื่อ ไฟล์นี้", func() {
+	renameItem := fyne.NewMenuItem("⚙︎ แก้ไขชื่อ ไฟล์นี้", func() {
 		s.renameEpisode(ep)
 	})
 	renameItem.Disabled = !ep.Exists
